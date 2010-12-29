@@ -214,8 +214,16 @@ ActiveRecord::ConnectionAdapters::PostgreSQLAdapter.class_eval do
   end
   
   def column_spatial_info(table_name)
+    # if this Postgres DB does not contain a geometry_columns table,
+    # PostGIS shapes are not used there
+    # in that case, just return the empty object
+    geometry_columns = select_value("select count(*) from information_schema.tables where table_name = 'geometry_columns'")
+    return {} if geometry_columns == "0"
+   
+    # find any geometry columns within this table
     constr = query("SELECT * FROM geometry_columns WHERE f_table_name = '#{table_name}'")
-
+    
+    # loop through and create objects for these geometry columns
     raw_geom_infos = {}
     constr.each do |constr_def_a|
       raw_geom_infos[constr_def_a[3]] ||= SpatialAdapter::RawGeomInfo.new
