@@ -1,3 +1,5 @@
+This fork does everything below, but begins to add redumentary support for IBM DB2 GeoSpatial Extender.
+
 = Spatial Adapter for ActiveRecord
 
 This is the Spatial Adapter for ActiveRecord.  It enhances ActiveRecord to
