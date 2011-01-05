@@ -29,8 +29,21 @@ ActiveRecord::ConnectionAdapters::IBM_DBAdapter.class_eval do
   alias :original_quote :quote
   #Redefines the quote method to add behaviour for when a Geometry is encountered
   def quote(value, column = nil)
-    if value.kind_of?(GeoRuby::SimpleFeatures::Geometry)
-      "'#{value.as_hex_ewkb}'"
+    
+    if value.kind_of?(GeoRuby::SimpleFeatures::Point)
+      "DB2GSE.ST_PointFromWKB(CAST(x'#{value.as_hex_wkb}' AS BLOB), 1)"
+    elsif value.kind_of?(GeoRuby::SimpleFeatures::LineString)
+      "DB2GSE.ST_LineFromWKB(CAST(x'#{value.as_hex_wkb}' AS BLOB), 1)"
+    elsif value.kind_of?(GeoRuby::SimpleFeatures::Polygon)
+      "DB2GSE.ST_PolyFromWKB(CAST(x'#{value.as_hex_wkb}' AS BLOB), 1)"
+    elsif value.kind_of?(GeoRuby::SimpleFeatures::GeometryCollection)
+      "DB2GSE.ST_GeomCollFromWKB(CAST(x'#{value.as_hex_wkb}' AS BLOB), 1)"
+    elsif value.kind_of?(GeoRuby::SimpleFeatures::MultiPoint)
+      "DB2GSE.ST_MPointFromWKB(CAST(x'#{value.as_hex_wkb}' AS BLOB), 1)"
+    elsif value.kind_of?(GeoRuby::SimpleFeatures::MultiPolygon)
+      "DB2GSE.ST_MPolyFromWKB(CAST(x'#{value.as_hex_wkb}' AS BLOB), 1)"
+    elsif value.kind_of?(GeoRuby::SimpleFeatures::MultiLineString)
+      "DB2GSE.ST_MLineFromWKB(CAST(x'#{value.as_hex_wkb}' AS BLOB), 1)"
     else
       original_quote(value,column)
     end
