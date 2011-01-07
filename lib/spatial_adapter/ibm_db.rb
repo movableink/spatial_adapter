@@ -266,9 +266,14 @@ ActiveRecord::ConnectionAdapters::IBM_DBAdapter.class_eval do
     indexes
   end
   
+  # DataFabric.activate_shard(:region => "armls")
   def column_spatial_info(table_name)
-    constr = select("SELECT * FROM DB2GSE.ST_GEOMETRY_COLUMNS WHERE TABLE_NAME = '#{table_name.upcase}'")
-
+    begin
+      constr = select("SELECT * FROM DB2GSE.ST_GEOMETRY_COLUMNS WHERE TABLE_NAME = '#{table_name.upcase}'")
+    rescue
+      return {}
+    end
+    
     raw_geom_infos = {}
     constr.each do |column|
       raw_geom_infos[column['column_name']] ||= SpatialAdapter::RawGeomInfo.new
