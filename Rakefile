@@ -1,10 +1,12 @@
 require 'rubygems'
-require 'spec/rake/spectask'
+require 'rspec/core/rake_task'
+require 'rake/gempackagetask'
 
 [:mysql, :postgresql].each do |adapter|
   desc "Run specs for #{adapter} adapter"
-  Spec::Rake::SpecTask.new("spec:#{adapter.to_s}") do |t|
-    t.spec_files = FileList["spec/#{adapter}/*_spec.rb"]
+  RSpec::Core::RakeTask.new("spec:#{adapter.to_s}") do |t|
+    t.rspec_opts = ["-c", "-f progress"]
+    t.pattern = "spec/#{adapter}/**/*_spec.rb"
   end
 end
 
@@ -37,4 +39,20 @@ begin
   Jeweler::GemcutterTasks.new
 rescue LoadError
   puts "WARNING: Jeweler is not available for building packages. Install it with: gem install jeweler"
+end
+
+spec = Gem::Specification::load("spatial_adapter.gemspec")
+Rake::GemPackageTask.new(spec) do |p|
+  p.gem_spec = spec
+  p.need_tar = true
+  p.need_zip = true
+end
+
+task :deploy do
+  gems = FileList['pkg/*.gem']
+  FileUtils.cp gems, '/opt/gems/dev/gems'
+  require 'rubygems'
+  require 'rubygems/indexer'
+  i=Gem::Indexer.new '/opt/gems/dev'
+  i.generate_index
 end
