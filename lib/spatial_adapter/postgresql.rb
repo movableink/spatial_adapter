@@ -215,6 +215,11 @@ module ActiveRecord::ConnectionAdapters
     end
 
     def column_spatial_info(table_name)
+      # if this Postgres DB does not contain a geometry_columns table,
+      # PostGIS shapes are not used there
+      # in that case, just return the empty object
+      geometry_columns = select_value("select count(*) from information_schema.tables where table_name = 'geometry_columns'")
+      return {} if geometry_columns == "0"
       constr = query("SELECT * FROM geometry_columns WHERE f_table_name = '#{table_name}'")
 
       raw_geom_infos = {}
