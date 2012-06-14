@@ -4,11 +4,9 @@ require 'active_record/connection_adapters/postgresql_adapter'
 module ActiveRecord::ConnectionAdapters
   class PostgreSQLAdapter
     def postgis_version
-      begin
-        select_value("SELECT postgis_full_version()").scan(/POSTGIS="([\d\.]*)"/)[0][0]
-      rescue ActiveRecord::StatementInvalid
-        nil
-      end
+      select_value("SELECT postgis_full_version()").scan(/POSTGIS="([\d\.]*)"/)[0][0]
+    rescue ActiveRecord::StatementInvalid
+      nil
     end
 
     def postgis_major_version
@@ -32,6 +30,15 @@ module ActiveRecord::ConnectionAdapters
     alias :original_native_database_types :native_database_types
     def native_database_types
       original_native_database_types.merge!(SpatialAdapter.geometry_data_types)
+    end
+
+    alias :original_type_cast :type_cast
+    def type_cast(value, column)
+      if value.kind_of?(GeoRuby::SimpleFeatures::Geometry)
+        value.as_hex_ewkb
+      else
+        original_type_cast(value, column)
+      end
     end
 
     alias :original_quote :quote
@@ -154,20 +161,17 @@ module ActiveRecord::ConnectionAdapters
        # Changed from upstread: link to pg_am to grab the index type (e.g. "gist")
        result = query(<<-SQL, name)
          SELECT distinct i.relname, d.indisunique, d.indkey, t.oid, am.amname
-           FROM pg_class t, pg_class i, pg_index d, pg_attribute a, pg_am am
+           FROM pg_class t
+           INNER JOIN pg_index d ON t.oid = d.indrelid
+           INNER JOIN pg_class i ON d.indexrelid = i.oid
+           INNER JOIN pg_attribute a ON a.attrelid = t.oid
+           INNER JOIN pg_am am ON i.relam = am.oid
          WHERE i.relkind = 'i'
-           AND d.indexrelid = i.oid
            AND d.indisprimary = 'f'
-           AND t.oid = d.indrelid
            AND t.relname = '#{table_name}'
            AND i.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname IN (#{schemas}) )
-           AND i.relam = am.oid
-           AND a.attrelid = t.oid
         ORDER BY i.relname
       SQL
-
-
-      indexes = []
 
       indexes = result.map do |row|
         index_name = row[0]
@@ -179,29 +183,27 @@ module ActiveRecord::ConnectionAdapters
         # Changed from upstream: need to get the column types to test for spatial indexes
         columns = query(<<-SQL, "Columns for index #{row[0]} on #{table_name}").inject({}) {|attlist, r| attlist[r[1]] = [r[0], r[2]]; attlist}
         SELECT a.attname, a.attnum, t.typname
-        FROM pg_attribute a, pg_type t
+        FROM pg_attribute a
+        INNER JOIN pg_type t ON a.atttypid = t.oid
         WHERE a.attrelid = #{oid}
         AND a.attnum IN (#{indkey.join(",")})
-        AND a.atttypid = t.oid
         SQL
 
         # Only GiST indexes on spatial columns denote a spatial index
         spatial = indtype == 'gist' && columns.size == 1 && (columns.values.first[1] == 'geometry' || columns.values.first[1] == 'geography')
 
-        column_names = indkey.map {|attnum| columns[attnum] ? columns[attnum][0] : nil }
+        column_names = indkey.map {|attnum| columns[attnum] ? columns[attnum][0] : nil }.compact
         ActiveRecord::ConnectionAdapters::IndexDefinition.new(table_name, index_name, unique, column_names, spatial)
       end
-
-      indexes
     end
 
     def disable_referential_integrity(&block) #:nodoc:
-      if supports_disable_referential_integrity?() then
+      if supports_disable_referential_integrity?()
         execute(tables_without_postgis.collect { |name| "ALTER TABLE #{quote_table_name(name)} DISABLE TRIGGER ALL" }.join(";"))
       end
       yield
     ensure
-      if supports_disable_referential_integrity?() then
+      if supports_disable_referential_integrity?()
         execute(tables_without_postgis.collect { |name| "ALTER TABLE #{quote_table_name(name)} ENABLE TRIGGER ALL" }.join(";"))
       end
     end
@@ -268,8 +270,7 @@ module ActiveRecord::ConnectionAdapters
   end
 
   class PostgreSQLColumnDefinition < ColumnDefinition
-    attr_accessor :table_name
-    attr_accessor :srid, :with_z, :with_m, :geographic
+    attr_accessor :table_name, :srid, :with_z, :with_m, :geographic
     attr_reader :spatial
 
     def initialize(base = nil, name = nil, type=nil, limit=nil, default=nil, null=nil, srid=-1, with_z=false, with_m=false, geographic=false)

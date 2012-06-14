@@ -9,6 +9,16 @@ describe "Modified PostgreSQLAdapter" do
     @connection = ActiveRecord::Base.connection
   end
 
+  describe '#native_database_types' do
+    it 'should include the geometry types' do
+      @connection.native_database_types.should include(@connection.geometry_data_types)
+    end
+
+    it 'should include the basic types' do
+      @connection.native_database_types.should include(ActiveRecord::ConnectionAdapters::PostgreSQLAdapter::NATIVE_DATABASE_TYPES)
+    end
+  end
+
   describe '#postgis_version' do
     it 'should report a version number if PostGIS is installed' do
       @connection.should_receive(:select_value).with('SELECT postgis_full_version()').and_return('POSTGIS="1.5.0" GEOS="3.2.0-CAPI-1.6.0" PROJ="Rel. 4.7.1, 23 September 2009" LIBXML="2.7.6" USE_STATS')
@@ -210,13 +220,17 @@ describe "Modified PostgreSQLAdapter" do
 
   describe "#add_index" do
     it "should create a spatial index given :spatial => true" do
-      @connection.should_receive(:execute).with(/using gist/i)
       @connection.add_index('geometry_models', 'geom', :spatial => true)
+      @connection.indexes('geometry_models').first.spatial.should be_true
+      @connection.indexes('geometry_models').first.columns.should == ['geom']
+      @connection.remove_index('geometry_models', 'geom')
     end
 
     it "should not create a spatial index unless specified" do
-      @connection.should_not_receive(:execute).with(/using gist/i)
       @connection.add_index('geometry_models', 'extra')
+      @connection.indexes('geometry_models').first.spatial.should be_false
+      @connection.indexes('geometry_models').first.columns.should == ['extra']
+      @connection.remove_index('geometry_models', 'extra')
     end
   end
 end
