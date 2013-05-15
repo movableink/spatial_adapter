@@ -34,6 +34,6 @@ Gem::Specification.new do |s|
     s.add_development_dependency 'activerecord-jdbcmysql-adapter'
   end
 
-  s.add_dependency 'activerecord', '>= 2.2.2', '< 5.0'
-  s.add_dependency 'GeoRuby', '>= 1.3.0'
+  s.add_dependency 'activerecord', '>= 3.2'
+  s.add_dependency 'georuby', '>= 2.0.0'
 end
