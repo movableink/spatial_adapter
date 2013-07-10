@@ -51,10 +51,15 @@ module ActiveRecord::ConnectionAdapters
       end
     end
 
-    def columns(table_name, name = nil) #:nodoc:
+    def columns(table_name, name=nil)
       raw_geom_infos = column_spatial_info(table_name)
 
-      column_definitions(table_name).collect do |name, type, default, notnull|
+      # Limit, precision, and scale are all handled by the superclass.
+      column_definitions(table_name).map do |column_name, type, default, notnull, oid, fmod|
+        oid = OID::TYPE_MAP.fetch(oid.to_i, fmod.to_i) {
+          OID::Identity.new
+        }
+
         case type
         when /geography/i
           ActiveRecord::ConnectionAdapters::SpatialPostgreSQLColumn.create_from_geography(name, default, type, notnull == 'f')
@@ -67,8 +72,9 @@ module ActiveRecord::ConnectionAdapters
             ActiveRecord::ConnectionAdapters::SpatialPostgreSQLColumn.new(name, default, raw_geom_info.type, notnull == "f", raw_geom_info.srid, raw_geom_info.with_z, raw_geom_info.with_m)
           end
         else
-          ActiveRecord::ConnectionAdapters::PostgreSQLColumn.new(name, default, type, notnull == "f")
+          ActiveRecord::ConnectionAdapters::PostgreSQLColumn.new(column_name, default, oid, type, notnull == 'f')
         end
+
       end
     end
 
