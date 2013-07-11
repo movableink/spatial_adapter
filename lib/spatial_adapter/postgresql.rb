@@ -80,29 +80,37 @@ module ActiveRecord::ConnectionAdapters
 
     def create_table(table_name, options = {})
       # Using the subclassed table definition
-      table_definition = ActiveRecord::ConnectionAdapters::PostgreSQLTableDefinition.new(self)
-      table_definition.primary_key(options[:primary_key] || ActiveRecord::Base.get_primary_key(table_name.to_s.singularize)) unless options[:id] == false
+      td = ActiveRecord::ConnectionAdapters::PostgreSQLTableDefinition.new native_database_types, table_name, options[:temporary], options[:options]
 
-      yield table_definition if block_given?
+      unless options[:id] == false
+        pk = options.fetch(:primary_key) {
+          ActiveRecord::Base.get_primary_key table_name.to_s.singularize
+        }
+
+        td.primary_key pk, options.fetch(:id, :primary_key), options
+      end
+
+      yield td if block_given?
 
       if options[:force] && table_exists?(table_name)
         drop_table(table_name, options)
       end
 
-      create_sql = "CREATE#{' TEMPORARY' if options[:temporary]} TABLE "
-      create_sql << "#{quote_table_name(table_name)} ("
-      create_sql << table_definition.to_sql
-      create_sql << ") #{options[:options]}"
+      create_sql = "CREATE#{' TEMPORARY' if td.temporary} TABLE "
+      create_sql << "#{quote_table_name(td.name)} ("
+      create_sql << td.columns.map { |c| schema_creation.accept c }.join(', ')
+      create_sql << ") #{td.options}"
 
       # This is the additional portion for PostGIS
-      unless table_definition.geom_columns.nil?
-        table_definition.geom_columns.each do |geom_column|
+      unless td.geom_columns.nil?
+        td.geom_columns.each do |geom_column|
           geom_column.table_name = table_name
           create_sql << "; " + geom_column.to_sql
         end
       end
 
       execute create_sql
+      td.indexes.each_pair { |c,o| add_index table_name, c, o }
     end
 
     alias :original_remove_column :remove_column
@@ -285,7 +293,7 @@ module ActiveRecord::ConnectionAdapters
     attr_reader :spatial
 
     def initialize(base = nil, name = nil, type=nil, limit=nil, default=nil, null=nil, srid=-1, with_z=false, with_m=false, geographic=false)
-      super(base, name, type, limit, default, null)
+      super(name, type, limit, nil, nil, default, null)
       @table_name = nil
       @spatial = true
       @srid = srid
